@@ -1,0 +1,41 @@
+# Binaries
+/bin/
+/dist/
+pgrelay
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test & coverage
+*.test
+*.out
+coverage.*
+profile.*
+
+# Go workspace
+go.work
+go.work.sum
+
+# Vendoring (we don't vendor)
+/vendor/
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+
+# Editor & OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local notes / planning (personal, not for the repo)
+PLAN.md
+NOTES.md
+TODO.md
+/scratch/
