@@ -1,0 +1,30 @@
+# Build artifacts
+bin/
+dist/
+*.test
+*.out
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Docs and local-dev configs not needed in the image
+docs/
+deploy/
+examples/
+
+# Git metadata (commit passed via build-arg, no need to copy .git)
+.git/
+.gitignore
+.gitattributes
+
+# CI / lint configs not needed for build
+.github/
+.golangci.yml
+
+# Local notes (defensive — also in .gitignore)
+PLAN.md
+NOTES.md
+TODO.md
+scratch/

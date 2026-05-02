@@ -1,7 +1,7 @@
 # Binaries
 /bin/
 /dist/
-pgrelay
+/pgrelay
 *.exe
 *.exe~
 *.dll
