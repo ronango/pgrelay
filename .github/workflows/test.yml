@@ -18,10 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify go.mod floor is 1.23
+      - name: Verify go.mod floor is 1.25
         run: |
-          grep -qE '^go 1\.23' go.mod || {
-            echo "::error file=go.mod::go.mod floor changed; expected 'go 1.23'"
+          grep -qE '^go 1\.25' go.mod || {
+            echo "::error file=go.mod::go.mod floor changed; expected 'go 1.25'"
             exit 1
           }
 
@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: ["1.23", "1.24"]
+        go: ["1.25"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
