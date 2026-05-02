@@ -1,0 +1,61 @@
+.DEFAULT_GOAL := help
+
+GO              ?= go
+BIN             := bin/pgrelay
+PKG             := ./cmd/pgrelay
+GOVULNCHECK_VER ?= v1.1.4
+VERSION         ?= dev
+# Recursive (=) so the git invocation only fires when COMMIT is actually expanded.
+COMMIT           = $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+LDFLAGS          = -X main.Version=$(VERSION) -X main.Commit=$(COMMIT)
+
+.PHONY: help
+help: ## Show this help.
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+.PHONY: build
+build: ## Build the pgrelay binary into ./bin
+	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) $(PKG)
+
+.PHONY: test
+test: ## Run unit tests with race detector.
+	$(GO) test -race -count=1 ./...
+
+.PHONY: test-integration
+test-integration: ## Run unit + integration tests (requires Docker).
+	$(GO) test -race -tags=integration -count=1 ./...
+
+.PHONY: coverage
+coverage: ## Run unit tests and write coverage profile to coverage.out.
+	$(GO) test -race -coverprofile=coverage.out ./...
+	$(GO) tool cover -func=coverage.out | tail -1
+
+.PHONY: check
+check: fmt lint vuln test ## Run fmt + lint + vuln + test in sequence.
+
+.PHONY: lint
+lint: ## Run golangci-lint.
+	golangci-lint run ./...
+
+.PHONY: fmt
+fmt: ## Format Go source files.
+	$(GO) fmt ./...
+
+.PHONY: vuln
+vuln: ## Run govulncheck.
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VER) ./...
+
+.PHONY: docker
+docker: ## Build the Docker image.
+	docker build -t pgrelay:dev \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		.
+
+.PHONY: tidy
+tidy: ## Run go mod tidy.
+	$(GO) mod tidy
+
+.PHONY: clean
+clean: ## Remove build artifacts.
+	rm -rf bin/
