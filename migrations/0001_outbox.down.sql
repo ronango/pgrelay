@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS pgrelay_outbox CASCADE;
