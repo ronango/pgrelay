@@ -4,6 +4,8 @@ GO              ?= go
 BIN             := bin/pgrelay
 PKG             := ./cmd/pgrelay
 GOVULNCHECK_VER ?= v1.1.4
+MIGRATE_VER     ?= v4.19.1
+DATABASE_URL    ?= postgres://pgrelay:pgrelay@localhost:5432/pgrelay?sslmode=disable
 VERSION         ?= dev
 # Recursive (=) so the git invocation only fires when COMMIT is actually expanded.
 COMMIT           = $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -51,6 +53,18 @@ docker: ## Build the Docker image.
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
 		.
+
+export DATABASE_URL
+
+.PHONY: migrate-up
+migrate-up: ## Apply all pending migrations against $DATABASE_URL.
+	@$(GO) run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@$(MIGRATE_VER) \
+		-path ./migrations -database "$$DATABASE_URL" up
+
+.PHONY: migrate-down
+migrate-down: ## Roll back the most recent migration against $DATABASE_URL.
+	@$(GO) run -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@$(MIGRATE_VER) \
+		-path ./migrations -database "$$DATABASE_URL" down 1
 
 .PHONY: tidy
 tidy: ## Run go mod tidy.

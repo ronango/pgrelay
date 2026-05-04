@@ -40,3 +40,21 @@ jobs:
       - run: make test
       - name: Build with CGO disabled (parity with Docker build)
         run: CGO_ENABLED=0 go build ./...
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["14", "15", "16", "17"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run integration tests on Postgres ${{ matrix.postgres }}
+        env:
+          PGRELAY_TEST_PG_IMAGE: postgres:${{ matrix.postgres }}-alpine
+        run: make test-integration
