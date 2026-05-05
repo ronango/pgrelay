@@ -61,6 +61,13 @@ func (t *tracer) TraceBatchStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceBa
 	return context.WithValue(ctx, startTimeKey, time.Now())
 }
 
+// TraceBatchQuery is required by pgx.BatchTracer to satisfy the interface
+// even though we don't observe per-query timing inside a batch — the batch
+// as a whole is timed via Start/End. Without this method the interface
+// assertion fails and pgx skips batch tracing entirely.
+func (t *tracer) TraceBatchQuery(_ context.Context, _ *pgx.Conn, _ pgx.TraceBatchQueryData) {
+}
+
 func (t *tracer) TraceBatchEnd(ctx context.Context, _ *pgx.Conn, data pgx.TraceBatchEndData) {
 	t.observe(ctx, "batch", data.Err)
 }
