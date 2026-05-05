@@ -31,8 +31,8 @@ type tracer struct {
 var queryDurationBuckets = []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5}
 
 // newTracer registers the two metrics on reg and returns the tracer.
-// Panics if the registry already has a metric with the same name —
-// caller must use a fresh prometheus.NewRegistry per tracer instance.
+// Panics on duplicate registration; New() handles cleanup on its own
+// failure paths so a failed New() does not leave the registry poisoned.
 func newTracer(reg prometheus.Registerer) *tracer {
 	t := &tracer{
 		duration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
