@@ -192,3 +192,146 @@ func TestLoad_PoolMinExceedsMax(t *testing.T) {
 		}
 	}
 }
+
+func TestLoad_ObservabilityDefaults(t *testing.T) {
+	t.Setenv("PGRELAY_DATABASE_URL", "postgres://localhost/test")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.OpsAddr != ":9090" {
+		t.Errorf("OpsAddr = %q, want :9090", cfg.OpsAddr)
+	}
+	if cfg.OTLPEndpoint != "" {
+		t.Errorf("OTLPEndpoint = %q, want empty (OTel disabled by default)", cfg.OTLPEndpoint)
+	}
+	if len(cfg.OTLPHeaders) != 0 {
+		t.Errorf("OTLPHeaders = %v, want empty map", cfg.OTLPHeaders)
+	}
+	if cfg.TracesSampler != "parentbased_always_on" {
+		t.Errorf("TracesSampler = %q, want parentbased_always_on", cfg.TracesSampler)
+	}
+	if cfg.TracesSamplerArg != "" {
+		t.Errorf("TracesSamplerArg = %q, want empty", cfg.TracesSamplerArg)
+	}
+}
+
+func TestLoad_ObservabilityOverrides(t *testing.T) {
+	t.Setenv("PGRELAY_DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("PGRELAY_OPS_ADDR", "127.0.0.1:8081")
+	t.Setenv("PGRELAY_OTEL_OTLP_ENDPOINT", "http://collector:4318")
+	t.Setenv("PGRELAY_OTEL_OTLP_HEADERS", "authorization=Bearer xyz,x-tenant=foo")
+	t.Setenv("PGRELAY_OTEL_TRACES_SAMPLER", "parentbased_traceidratio")
+	t.Setenv("PGRELAY_OTEL_TRACES_SAMPLER_ARG", "0.1")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.OpsAddr != "127.0.0.1:8081" {
+		t.Errorf("OpsAddr = %q", cfg.OpsAddr)
+	}
+	if cfg.OTLPEndpoint != "http://collector:4318" {
+		t.Errorf("OTLPEndpoint = %q", cfg.OTLPEndpoint)
+	}
+	if cfg.OTLPHeaders["authorization"] != "Bearer xyz" || cfg.OTLPHeaders["x-tenant"] != "foo" {
+		t.Errorf("OTLPHeaders = %v, want {authorization: Bearer xyz, x-tenant: foo}", cfg.OTLPHeaders)
+	}
+	if cfg.TracesSampler != "parentbased_traceidratio" {
+		t.Errorf("TracesSampler = %q", cfg.TracesSampler)
+	}
+	if cfg.TracesSamplerArg != "0.1" {
+		t.Errorf("TracesSamplerArg = %q", cfg.TracesSamplerArg)
+	}
+}
+
+func TestLoad_OpsAddrIPv6(t *testing.T) {
+	t.Setenv("PGRELAY_DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("PGRELAY_OPS_ADDR", "[::1]:9090")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.OpsAddr != "[::1]:9090" {
+		t.Errorf("OpsAddr = %q, want [::1]:9090", cfg.OpsAddr)
+	}
+}
+
+func TestLoad_ObservabilityInvalid(t *testing.T) {
+	cases := []struct {
+		name   string
+		setEnv map[string]string
+		envKey string // env var name expected in error message
+	}{
+		{
+			name:   "ops_addr_missing_colon",
+			setEnv: map[string]string{"PGRELAY_OPS_ADDR": "9090"},
+			envKey: "PGRELAY_OPS_ADDR",
+		},
+		{
+			name:   "otlp_endpoint_bad_scheme",
+			setEnv: map[string]string{"PGRELAY_OTEL_OTLP_ENDPOINT": "ftp://collector:4318"},
+			envKey: "PGRELAY_OTEL_OTLP_ENDPOINT",
+		},
+		{
+			name:   "otlp_endpoint_missing_host",
+			setEnv: map[string]string{"PGRELAY_OTEL_OTLP_ENDPOINT": "http://"},
+			envKey: "PGRELAY_OTEL_OTLP_ENDPOINT",
+		},
+		{
+			name: "sampler_arg_set_for_non_ratio",
+			setEnv: map[string]string{
+				"PGRELAY_OTEL_TRACES_SAMPLER":     "always_on",
+				"PGRELAY_OTEL_TRACES_SAMPLER_ARG": "0.5",
+			},
+			envKey: "PGRELAY_OTEL_TRACES_SAMPLER_ARG",
+		},
+		{
+			name:   "sampler_unknown",
+			setEnv: map[string]string{"PGRELAY_OTEL_TRACES_SAMPLER": "random_sampler"},
+			envKey: "PGRELAY_OTEL_TRACES_SAMPLER",
+		},
+		{
+			name: "ratio_sampler_missing_arg",
+			setEnv: map[string]string{
+				"PGRELAY_OTEL_TRACES_SAMPLER": "traceidratio",
+			},
+			envKey: "PGRELAY_OTEL_TRACES_SAMPLER_ARG",
+		},
+		{
+			name: "ratio_sampler_bad_arg",
+			setEnv: map[string]string{
+				"PGRELAY_OTEL_TRACES_SAMPLER":     "parentbased_traceidratio",
+				"PGRELAY_OTEL_TRACES_SAMPLER_ARG": "abc",
+			},
+			envKey: "PGRELAY_OTEL_TRACES_SAMPLER_ARG",
+		},
+		{
+			name: "ratio_sampler_out_of_range",
+			setEnv: map[string]string{
+				"PGRELAY_OTEL_TRACES_SAMPLER":     "traceidratio",
+				"PGRELAY_OTEL_TRACES_SAMPLER_ARG": "1.5",
+			},
+			envKey: "PGRELAY_OTEL_TRACES_SAMPLER_ARG",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PGRELAY_DATABASE_URL", "postgres://localhost/test")
+			for k, v := range tc.setEnv {
+				t.Setenv(k, v)
+			}
+
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("expected error for %s, got nil", tc.name)
+			}
+			if !strings.Contains(err.Error(), tc.envKey) {
+				t.Errorf("error = %q, want substring %q", err, tc.envKey)
+			}
+		})
+	}
+}
