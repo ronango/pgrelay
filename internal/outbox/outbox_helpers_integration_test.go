@@ -69,8 +69,17 @@ func insertRow(t testing.TB, pool *pgxpool.Pool, o insertOpts) int64 {
 		o.Status = "pending"
 	}
 
-	nextAt := pgtype.Timestamptz{Time: o.NextAttemptAt, Valid: !o.NextAttemptAt.IsZero()}
-	leased := pgtype.Timestamptz{Time: o.LeasedUntil, Valid: !o.LeasedUntil.IsZero()}
+	// pgx serializes time.Time as timestamptz; passing nil for an
+	// untyped `any` produces a SQL NULL. pgtype.Timestamptz round-trips
+	// less predictably here (the Valid=true case got reordered to NULL
+	// in observed runs).
+	var nextAt, leased any
+	if !o.NextAttemptAt.IsZero() {
+		nextAt = o.NextAttemptAt
+	}
+	if !o.LeasedUntil.IsZero() {
+		leased = o.LeasedUntil
+	}
 
 	const sql = `
 		INSERT INTO pgrelay_outbox (
