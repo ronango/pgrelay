@@ -36,6 +36,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
+          check-latest: true
           cache: true
       - run: make test
       - name: Build with CGO disabled (parity with Docker build)
@@ -53,6 +54,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
       - name: Run integration tests on Postgres ${{ matrix.postgres }}
         env:
