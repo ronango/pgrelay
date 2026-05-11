@@ -11,11 +11,6 @@ on:
 permissions:
   contents: read
 
-# Lets `go` auto-download the toolchain required by go.mod when
-# setup-go's version manifest lags behind a freshly released patch.
-env:
-  GOTOOLCHAIN: auto
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -27,9 +22,10 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          # Pinned to the same minor as the go.mod floor (without the patch),
-          # so setup-go installs the latest 1.25.x with all stdlib fixes.
-          # Bump in lockstep with the go.mod floor.
+          # Pinned to the same minor as the go.mod floor (without the patch).
+          # check-latest forces a manifest re-check each run so a freshly
+          # released stdlib patch is picked up without changing this yml.
           go-version: "1.25"
+          check-latest: true
           cache: true
       - run: make vuln

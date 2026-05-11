@@ -9,11 +9,6 @@ on:
 permissions:
   contents: read
 
-# Lets `go` auto-download the toolchain required by go.mod when
-# setup-go's version manifest lags behind a freshly released patch.
-env:
-  GOTOOLCHAIN: auto
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -26,6 +21,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
       - uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
         with:
