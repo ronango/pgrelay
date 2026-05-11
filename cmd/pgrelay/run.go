@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/urfave/cli/v3"
 	"golang.org/x/sync/errgroup"
@@ -12,10 +14,16 @@ import (
 	"github.com/ronango/pgrelay/internal/config"
 	"github.com/ronango/pgrelay/internal/health"
 	"github.com/ronango/pgrelay/internal/metrics"
+	"github.com/ronango/pgrelay/internal/otel"
 	"github.com/ronango/pgrelay/internal/outbox"
 	"github.com/ronango/pgrelay/internal/outbox/sinks"
 	"github.com/ronango/pgrelay/internal/pgconn"
 )
+
+// otelFlushTimeout caps the BatchSpanProcessor drain on shutdown. The
+// flush runs on a fresh context because the parent is already canceled
+// by SIGINT/SIGTERM at that point.
+const otelFlushTimeout = 5 * time.Second
 
 func runCommand() *cli.Command {
 	return &cli.Command{
@@ -30,8 +38,27 @@ func runAction(ctx context.Context, _ *cli.Command) error {
 	if err != nil {
 		return err
 	}
-
 	log := newLogger(cfg.LogLevel)
+
+	flushOTel, err := otel.Setup(ctx, otel.Config{
+		ServiceName:      "pgrelay",
+		ServiceVersion:   Version,
+		OTLPEndpoint:     cfg.OTLPEndpoint,
+		OTLPHeaders:      cfg.OTLPHeaders,
+		TracesSampler:    cfg.TracesSampler,
+		TracesSamplerArg: cfg.TracesSamplerArg,
+	})
+	if err != nil {
+		return fmt.Errorf("otel setup: %w", err)
+	}
+	defer func() {
+		flushCtx, cancel := context.WithTimeout(context.Background(), otelFlushTimeout)
+		defer cancel()
+		if flushErr := flushOTel(flushCtx); flushErr != nil {
+			log.WarnContext(ctx, "otel flush failed", "err", flushErr)
+		}
+	}()
+
 	reg := metrics.NewRegistry()
 
 	pool, err := pgconn.New(ctx, pgconn.Config{
