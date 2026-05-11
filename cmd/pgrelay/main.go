@@ -2,8 +2,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"runtime/debug"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/urfave/cli/v3"
 )
 
 // Version and Commit are overridden at build time via -ldflags.
@@ -14,39 +19,26 @@ var (
 )
 
 func main() {
-	fmt.Println(versionString())
+	if err := dispatch(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
-func versionString() string {
-	commit := Commit
-	suffix := ""
-	if commit == "" {
-		commit, suffix = vcsRevision()
-	}
-	if commit == "" {
-		return fmt.Sprintf("pgrelay %s (commit unknown — built without --build-arg COMMIT)", Version)
-	}
-	return fmt.Sprintf("pgrelay %s (commit %s%s)", Version, commit, suffix)
-}
+// dispatch returns instead of calling os.Exit so deferred cleanup (signal
+// notify, future OTel flush) actually runs on error paths.
+func dispatch() error {
+	// SIGINT/SIGTERM cancellation flows into long-running subcommands
+	// (run, migrate) via the cli ctx; short ones (version) ignore it.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-func vcsRevision() (revision, suffix string) {
-	bi, ok := debug.ReadBuildInfo()
-	if !ok {
-		return "", ""
+	cmd := &cli.Command{
+		Name:  "pgrelay",
+		Usage: "Postgres-native transactional outbox dispatcher",
+		Commands: []*cli.Command{
+			versionCommand(),
+		},
 	}
-	var modified bool
-	for _, s := range bi.Settings {
-		switch s.Key {
-		case "vcs.revision":
-			if s.Value != "" {
-				revision = s.Value[:min(len(s.Value), 7)]
-			}
-		case "vcs.modified":
-			modified = s.Value == "true"
-		}
-	}
-	if modified {
-		suffix = "+dirty"
-	}
-	return revision, suffix
+	return cmd.Run(ctx, os.Args)
 }
