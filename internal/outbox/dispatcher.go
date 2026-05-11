@@ -104,6 +104,13 @@ func (d *Dispatcher) dispatch(ctx context.Context, row Row) {
 	// Observed on every outcome so failure tails land in the histogram.
 	d.metrics.DispatchDuration.WithLabelValues(d.sink.Name()).Observe(time.Since(start).Seconds())
 
+	// Shutdown mid-Send: writing a terminal state would mask uncertainty
+	// — the request may or may not have hit the sink. Leave the row
+	// in_flight; the lease sweeper redelivers under at-least-once.
+	if errors.Is(sendErr, context.Canceled) || errors.Is(sendErr, context.DeadlineExceeded) {
+		return
+	}
+
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeTimeout)
 	defer cancel()
 
