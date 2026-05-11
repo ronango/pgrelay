@@ -39,6 +39,7 @@ func dispatch() error {
 		Commands: []*cli.Command{
 			versionCommand(),
 			migrateCommand(),
+			runCommand(),
 		},
 	}
 	return cmd.Run(ctx, os.Args)
