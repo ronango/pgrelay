@@ -35,7 +35,21 @@ type Config struct {
 	OTLPHeaders      map[string]string `env:"PGRELAY_OTEL_OTLP_HEADERS"        envSeparator:"," envKeyValSeparator:"="`
 	TracesSampler    string            `env:"PGRELAY_OTEL_TRACES_SAMPLER"      envDefault:"parentbased_always_on"`
 	TracesSamplerArg string            `env:"PGRELAY_OTEL_TRACES_SAMPLER_ARG"`
+
+	// Outbox dispatcher — consumed by internal/outbox.
+	// Backoff: delay = min(RetryMax, RetryBase * 2^(attempt-1)) ± RetryJitter.
+	PollInterval  time.Duration `env:"PGRELAY_POLL_INTERVAL"  envDefault:"100ms"`
+	BatchSize     int32         `env:"PGRELAY_BATCH_SIZE"     envDefault:"100"`
+	LeaseDuration time.Duration `env:"PGRELAY_LEASE_DURATION" envDefault:"30s"`
+	MaxAttempts   int           `env:"PGRELAY_MAX_ATTEMPTS"   envDefault:"10"`
+	RetryBase     time.Duration `env:"PGRELAY_RETRY_BASE"     envDefault:"1s"`
+	RetryMax      time.Duration `env:"PGRELAY_RETRY_MAX"      envDefault:"5m"`
+	RetryJitter   float64       `env:"PGRELAY_RETRY_JITTER"   envDefault:"0.2"`
 }
+
+// maxBatchSize caps PGRELAY_BATCH_SIZE so a misconfigured env var can't
+// pull millions of rows into memory in one claim.
+const maxBatchSize = 10_000
 
 // validLogLevels is the strict subset accepted by every candidate logger
 // (slog / zap / zerolog). Widen here if the observability layer picks one
@@ -144,6 +158,31 @@ func (c *Config) Validate() error {
 		// Reject set-but-ignored arg explicitly: a no-op env var is a
 		// debugging trap when an operator sets it expecting an effect.
 		return fmt.Errorf("PGRELAY_OTEL_TRACES_SAMPLER_ARG: must be empty when sampler is %q (only used with *traceidratio)", c.TracesSampler)
+	}
+
+	if c.PollInterval <= 0 {
+		return fmt.Errorf("PGRELAY_POLL_INTERVAL: must be > 0, got %s", c.PollInterval)
+	}
+	if c.BatchSize < 1 || c.BatchSize > maxBatchSize {
+		return fmt.Errorf("PGRELAY_BATCH_SIZE: must be in [1, %d], got %d", maxBatchSize, c.BatchSize)
+	}
+	if c.LeaseDuration <= 0 {
+		return fmt.Errorf("PGRELAY_LEASE_DURATION: must be > 0, got %s", c.LeaseDuration)
+	}
+	if c.LeaseDuration <= c.PollInterval {
+		return fmt.Errorf("PGRELAY_LEASE_DURATION (%s) must be > PGRELAY_POLL_INTERVAL (%s)", c.LeaseDuration, c.PollInterval)
+	}
+	if c.MaxAttempts < 1 {
+		return fmt.Errorf("PGRELAY_MAX_ATTEMPTS: must be >= 1, got %d", c.MaxAttempts)
+	}
+	if c.RetryBase <= 0 {
+		return fmt.Errorf("PGRELAY_RETRY_BASE: must be > 0, got %s", c.RetryBase)
+	}
+	if c.RetryMax < c.RetryBase {
+		return fmt.Errorf("PGRELAY_RETRY_MAX (%s) must be >= PGRELAY_RETRY_BASE (%s)", c.RetryMax, c.RetryBase)
+	}
+	if c.RetryJitter < 0 || c.RetryJitter > 1 {
+		return fmt.Errorf("PGRELAY_RETRY_JITTER: must be in [0, 1], got %v", c.RetryJitter)
 	}
 
 	return nil

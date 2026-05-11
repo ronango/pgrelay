@@ -260,6 +260,127 @@ func TestLoad_OpsAddrIPv6(t *testing.T) {
 	}
 }
 
+func TestLoad_DispatcherDefaults(t *testing.T) {
+	t.Setenv("PGRELAY_DATABASE_URL", "postgres://localhost/test")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	checks := []struct {
+		name string
+		got  any
+		want any
+	}{
+		{"PollInterval", cfg.PollInterval, 100 * time.Millisecond},
+		{"BatchSize", cfg.BatchSize, int32(100)},
+		{"LeaseDuration", cfg.LeaseDuration, 30 * time.Second},
+		{"MaxAttempts", cfg.MaxAttempts, 10},
+		{"RetryBase", cfg.RetryBase, time.Second},
+		{"RetryMax", cfg.RetryMax, 5 * time.Minute},
+		{"RetryJitter", cfg.RetryJitter, 0.2},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s = %v, want %v", c.name, c.got, c.want)
+		}
+	}
+}
+
+func TestLoad_DispatcherOverrides(t *testing.T) {
+	t.Setenv("PGRELAY_DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("PGRELAY_POLL_INTERVAL", "250ms")
+	t.Setenv("PGRELAY_BATCH_SIZE", "50")
+	t.Setenv("PGRELAY_LEASE_DURATION", "1m")
+	t.Setenv("PGRELAY_MAX_ATTEMPTS", "5")
+	t.Setenv("PGRELAY_RETRY_BASE", "500ms")
+	t.Setenv("PGRELAY_RETRY_MAX", "10m")
+	t.Setenv("PGRELAY_RETRY_JITTER", "0.5")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	checks := []struct {
+		name string
+		got  any
+		want any
+	}{
+		{"PollInterval", cfg.PollInterval, 250 * time.Millisecond},
+		{"BatchSize", cfg.BatchSize, int32(50)},
+		{"LeaseDuration", cfg.LeaseDuration, time.Minute},
+		{"MaxAttempts", cfg.MaxAttempts, 5},
+		{"RetryBase", cfg.RetryBase, 500 * time.Millisecond},
+		{"RetryMax", cfg.RetryMax, 10 * time.Minute},
+		{"RetryJitter", cfg.RetryJitter, 0.5},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s = %v, want %v", c.name, c.got, c.want)
+		}
+	}
+}
+
+func TestLoad_DispatcherBoundaries(t *testing.T) {
+	// Boundary case: RetryMax == RetryBase is legal (no exponential growth,
+	// every retry waits exactly RetryBase ± jitter).
+	t.Setenv("PGRELAY_DATABASE_URL", "postgres://localhost/test")
+	t.Setenv("PGRELAY_RETRY_BASE", "5s")
+	t.Setenv("PGRELAY_RETRY_MAX", "5s")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load with RetryMax==RetryBase should succeed: %v", err)
+	}
+	if cfg.RetryBase != cfg.RetryMax {
+		t.Errorf("RetryBase=%s RetryMax=%s should be equal", cfg.RetryBase, cfg.RetryMax)
+	}
+}
+
+func TestLoad_DispatcherInvalid(t *testing.T) {
+	cases := []struct {
+		name   string
+		setEnv map[string]string
+		envKey string
+	}{
+		{"poll_interval_zero", map[string]string{"PGRELAY_POLL_INTERVAL": "0s"}, "PGRELAY_POLL_INTERVAL"},
+		{"poll_interval_negative", map[string]string{"PGRELAY_POLL_INTERVAL": "-100ms"}, "PGRELAY_POLL_INTERVAL"},
+		{"batch_size_zero", map[string]string{"PGRELAY_BATCH_SIZE": "0"}, "PGRELAY_BATCH_SIZE"},
+		{"lease_duration_zero", map[string]string{"PGRELAY_LEASE_DURATION": "0s"}, "PGRELAY_LEASE_DURATION"},
+		{"max_attempts_zero", map[string]string{"PGRELAY_MAX_ATTEMPTS": "0"}, "PGRELAY_MAX_ATTEMPTS"},
+		{"retry_base_zero", map[string]string{"PGRELAY_RETRY_BASE": "0s"}, "PGRELAY_RETRY_BASE"},
+		{"retry_jitter_negative", map[string]string{"PGRELAY_RETRY_JITTER": "-0.1"}, "PGRELAY_RETRY_JITTER"},
+		{"retry_jitter_above_one", map[string]string{"PGRELAY_RETRY_JITTER": "1.5"}, "PGRELAY_RETRY_JITTER"},
+		{"retry_max_below_base", map[string]string{
+			"PGRELAY_RETRY_BASE": "10s",
+			"PGRELAY_RETRY_MAX":  "1s",
+		}, "PGRELAY_RETRY_MAX"},
+		{"batch_size_above_ceiling", map[string]string{"PGRELAY_BATCH_SIZE": "100000"}, "PGRELAY_BATCH_SIZE"},
+		{"lease_duration_at_poll_interval", map[string]string{
+			"PGRELAY_LEASE_DURATION": "100ms",
+			"PGRELAY_POLL_INTERVAL":  "100ms",
+		}, "PGRELAY_LEASE_DURATION"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PGRELAY_DATABASE_URL", "postgres://localhost/test")
+			for k, v := range tc.setEnv {
+				t.Setenv(k, v)
+			}
+
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("expected error for %s, got nil", tc.name)
+			}
+			if !strings.Contains(err.Error(), tc.envKey) {
+				t.Errorf("error = %q, want substring %q", err, tc.envKey)
+			}
+		})
+	}
+}
+
 func TestLoad_ObservabilityInvalid(t *testing.T) {
 	cases := []struct {
 		name   string
