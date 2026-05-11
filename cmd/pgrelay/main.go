@@ -38,6 +38,7 @@ func dispatch() error {
 		Usage: "Postgres-native transactional outbox dispatcher",
 		Commands: []*cli.Command{
 			versionCommand(),
+			migrateCommand(),
 		},
 	}
 	return cmd.Run(ctx, os.Args)
