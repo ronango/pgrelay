@@ -3,6 +3,7 @@ package outbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -27,6 +28,11 @@ type Dispatcher struct {
 // finalizeTimeout caps the detached terminal-write so a canceled
 // dispatch still persists its outcome instead of leaking to the sweeper.
 const finalizeTimeout = 5 * time.Second
+
+// maxPayloadBytes guards against an INSERT'ed oversized JSONB blob
+// OOM-killing the dispatcher on every retry. App-layer only; DB-level
+// CHECK is a future migration.
+const maxPayloadBytes = 1 << 20
 
 // New wires a Dispatcher.
 func New(pool *pgxpool.Pool, sink sinks.Sink, policy *Policy, metrics *Metrics, cfg config.Config, log *slog.Logger) *Dispatcher {
@@ -87,6 +93,18 @@ func (d *Dispatcher) poll(ctx context.Context) {
 }
 
 func (d *Dispatcher) dispatch(ctx context.Context, row Row) {
+	if len(row.Payload) > maxPayloadBytes {
+		writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finalizeTimeout)
+		defer cancel()
+		errStr := fmt.Sprintf("payload %d bytes exceeds %d cap", len(row.Payload), maxPayloadBytes)
+		if err := MarkDead(writeCtx, d.pool, row.ID, errStr); err != nil {
+			d.log.ErrorContext(writeCtx, "mark dead failed", "id", row.ID, "err", err, "last_error", errStr)
+			return
+		}
+		d.metrics.Attempts.WithLabelValues(ResultDead).Inc()
+		return
+	}
+
 	msg := sinks.Message{
 		ID:            row.ID,
 		AggregateType: row.AggregateType,
