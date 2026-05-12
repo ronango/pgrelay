@@ -88,9 +88,14 @@ const runArgsTimeout = 30 * time.Second
 // its own helper that wires SIGTERM and timeouts.
 func runArgs(t testing.TB, envOverrides []string, args ...string) cmdResult {
 	t.Helper()
+	// Resolve the binary outside the timeout — the first caller pays
+	// the `go build -race` cost (~30s cold), and that's compile time,
+	// not subcommand runtime.
+	bin := buildBinary(t)
+
 	ctx, cancel := context.WithTimeout(t.Context(), runArgsTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, buildBinary(t), args...)
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Env = append(envBaseline(), envOverrides...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
