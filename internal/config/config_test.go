@@ -280,6 +280,7 @@ func TestLoad_DispatcherDefaults(t *testing.T) {
 		{"RetryBase", cfg.RetryBase, time.Second},
 		{"RetryMax", cfg.RetryMax, 5 * time.Minute},
 		{"RetryJitter", cfg.RetryJitter, 0.2},
+		{"ShutdownTimeout", cfg.ShutdownTimeout, 30 * time.Second},
 	}
 	for _, c := range checks {
 		if c.got != c.want {
@@ -297,6 +298,7 @@ func TestLoad_DispatcherOverrides(t *testing.T) {
 	t.Setenv("PGRELAY_RETRY_BASE", "500ms")
 	t.Setenv("PGRELAY_RETRY_MAX", "10m")
 	t.Setenv("PGRELAY_RETRY_JITTER", "0.5")
+	t.Setenv("PGRELAY_SHUTDOWN_TIMEOUT", "45s")
 
 	cfg, err := Load()
 	if err != nil {
@@ -315,6 +317,7 @@ func TestLoad_DispatcherOverrides(t *testing.T) {
 		{"RetryBase", cfg.RetryBase, 500 * time.Millisecond},
 		{"RetryMax", cfg.RetryMax, 10 * time.Minute},
 		{"RetryJitter", cfg.RetryJitter, 0.5},
+		{"ShutdownTimeout", cfg.ShutdownTimeout, 45 * time.Second},
 	}
 	for _, c := range checks {
 		if c.got != c.want {
@@ -358,6 +361,7 @@ func TestLoad_DispatcherInvalid(t *testing.T) {
 			"PGRELAY_RETRY_MAX":  "1s",
 		}, "PGRELAY_RETRY_MAX"},
 		{"batch_size_above_ceiling", map[string]string{"PGRELAY_BATCH_SIZE": "100000"}, "PGRELAY_BATCH_SIZE"},
+		{"shutdown_timeout_below_floor", map[string]string{"PGRELAY_SHUTDOWN_TIMEOUT": "500ms"}, "PGRELAY_SHUTDOWN_TIMEOUT"},
 		{"lease_duration_at_poll_interval", map[string]string{
 			"PGRELAY_LEASE_DURATION": "100ms",
 			"PGRELAY_POLL_INTERVAL":  "100ms",

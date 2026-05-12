@@ -45,6 +45,13 @@ type Config struct {
 	RetryBase     time.Duration `env:"PGRELAY_RETRY_BASE"     envDefault:"1s"`
 	RetryMax      time.Duration `env:"PGRELAY_RETRY_MAX"      envDefault:"5m"`
 	RetryJitter   float64       `env:"PGRELAY_RETRY_JITTER"   envDefault:"0.2"`
+
+	// Process-level shutdown budget for the run subcommand. Caps how
+	// long the binary waits for dispatcher + health subsystems to
+	// drain after SIGINT/SIGTERM. Recommend k8s
+	// terminationGracePeriodSeconds set above this plus the OTel
+	// flush budget (a few seconds).
+	ShutdownTimeout time.Duration `env:"PGRELAY_SHUTDOWN_TIMEOUT" envDefault:"30s"`
 }
 
 // maxBatchSize caps PGRELAY_BATCH_SIZE so a misconfigured env var can't
@@ -183,6 +190,9 @@ func (c *Config) Validate() error {
 	}
 	if c.RetryJitter < 0 || c.RetryJitter > 1 {
 		return fmt.Errorf("PGRELAY_RETRY_JITTER: must be in [0, 1], got %v", c.RetryJitter)
+	}
+	if c.ShutdownTimeout < time.Second {
+		return fmt.Errorf("PGRELAY_SHUTDOWN_TIMEOUT: must be >= 1s, got %s", c.ShutdownTimeout)
 	}
 
 	return nil
