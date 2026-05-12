@@ -5,6 +5,7 @@ package outbox_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -100,6 +101,33 @@ func TestDispatcher_HappyPath(t *testing.T) {
 	}
 	if got := f.attemptsCount(outbox.ResultSent); got < 1 {
 		t.Errorf("attempts_total{sent} = %v, want >= 1", got)
+	}
+}
+
+func TestDispatcher_OversizedPayloadMarkedDeadWithoutSending(t *testing.T) {
+	pool := testdb.New(t)
+	f := startDispatcher(t, pool, fastConfig())
+
+	// 1 MiB + 1 byte — over the dispatcher cap.
+	oversized := make([]byte, (1<<20)+1)
+	for i := range oversized {
+		oversized[i] = 'x'
+	}
+	// Wrap as JSON string so the JSONB column accepts it.
+	payload := append([]byte{'"'}, oversized...)
+	payload = append(payload, '"')
+
+	id := insertRow(t, pool, insertOpts{Payload: payload})
+
+	r := waitForStatus(t, pool, id, "dead", 2*time.Second)
+	if !strings.Contains(r.LastError, "exceeds") {
+		t.Errorf("LastError = %q, want mention of cap exceeded", r.LastError)
+	}
+	if f.Sink.SentCount() != 0 {
+		t.Errorf("sink saw %d messages, want 0 (oversized never sent)", f.Sink.SentCount())
+	}
+	if got := f.attemptsCount(outbox.ResultDead); got < 1 {
+		t.Errorf("attempts_total{dead} = %v, want >= 1", got)
 	}
 }
 

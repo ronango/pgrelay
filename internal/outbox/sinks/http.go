@@ -90,6 +90,20 @@ func (s *HTTPSink) Send(ctx context.Context, msg Message) error {
 	if msg.Destination == "" {
 		return errors.New("destination required")
 	}
+	if msg.Traceparent != "" && !validHeaderValue(msg.Traceparent) {
+		return errors.New("traceparent contains control character")
+	}
+	if msg.Tracestate != "" && !validHeaderValue(msg.Tracestate) {
+		return errors.New("tracestate contains control character")
+	}
+	for k, v := range msg.Headers {
+		if !validHeaderName(k) {
+			return fmt.Errorf("header name %q invalid (RFC 7230 tchar)", k)
+		}
+		if !validHeaderValue(v) {
+			return fmt.Errorf("header %q value contains control character", k)
+		}
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, msg.Destination, bytes.NewReader(msg.Payload))
 	if err != nil {
@@ -165,6 +179,46 @@ func isRetryableStatus(status int) bool {
 		return true
 	}
 	return status >= 500 && status < 600
+}
+
+// validHeaderValue mirrors net/textproto's check: rejects any control
+// byte below 0x20 (except tab) and DEL (0x7f). Without this bail-early
+// the row would be retried until MaxAttempts on transport-classified
+// errors. OWS around values is not stripped — Go's net/http passes them
+// through; producers must trim if downstream peers are strict.
+func validHeaderValue(v string) bool {
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if c == '\t' {
+			continue
+		}
+		if c < 0x20 || c == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+// validHeaderName rejects characters HTTP forbids in header names per
+// RFC 7230 §3.2.6 (control bytes, separators, and whitespace).
+func validHeaderName(name string) bool {
+	// Empty must be rejected explicitly — the loop alone would pass it.
+	if name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		// tchar set: alphanumerics + !#$%&'*+-.^_`|~
+		switch {
+		case c >= 'a' && c <= 'z':
+		case c >= 'A' && c <= 'Z':
+		case c >= '0' && c <= '9':
+		case strings.IndexByte("!#$%&'*+-.^_`|~", c) >= 0:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // parseRetryAfter returns the duration encoded in a Retry-After header.
