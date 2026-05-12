@@ -1,0 +1,117 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+# Lets `go` auto-download the toolchain required by go.mod when
+# setup-go's version manifest lags behind a freshly released patch.
+env:
+  GOTOOLCHAIN: auto
+
+jobs:
+  binaries:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.target.goos }}
+          GOARCH: ${{ matrix.target.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          BIN="pgrelay-${VERSION}-${GOOS}-${GOARCH}"
+          go build \
+            -trimpath \
+            -ldflags "-s -w -X main.Version=${VERSION} -X main.Commit=${SHORT_SHA}" \
+            -o "${BIN}" \
+            ./cmd/pgrelay
+          tar -czf "${BIN}.tar.gz" "${BIN}"
+          sha256sum "${BIN}.tar.gz" > "${BIN}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.target.goos }}-${{ matrix.target.goarch }}
+          path: |
+            pgrelay-*.tar.gz
+            pgrelay-*.tar.gz.sha256
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
+
+  release:
+    needs: [binaries, docker]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Extract CHANGELOG section
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Literal-match the heading (no regex) so dots in the version
+          # don't accidentally match other revisions.
+          awk -v ver="${VERSION}" '
+            index($0, "## [" ver "]") == 1 { flag=1; next }
+            flag && /^## \[/ { exit }
+            flag { print }
+          ' CHANGELOG.md > release-notes.md
+          # Bail loudly if the section is empty — the tag has no CHANGELOG entry.
+          if [ ! -s release-notes.md ]; then
+            echo "::error::CHANGELOG.md has no [${VERSION}] section"
+            exit 1
+          fi
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          body_path: release-notes.md
+          files: artifacts/*
+          draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
