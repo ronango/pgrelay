@@ -327,6 +327,80 @@ func TestHTTPSink_EmptyDestinationTerminal(t *testing.T) {
 	}
 }
 
+func TestHTTPSink_RejectsMalformedHeaderFields(t *testing.T) {
+	// Producer can write control bytes (CR/LF/NUL, DEL, other <0x20)
+	// into traceparent/tracestate/headers. Without validation the row
+	// is retried up to MaxAttempts; the sink rejects terminally instead.
+	cases := []struct {
+		name string
+		msg  sinks.Message
+		want string
+	}{
+		{
+			name: "traceparent_with_lf",
+			msg:  sinks.Message{ID: 1, Destination: "http://x.test", Payload: []byte("{}"), Traceparent: "tp\nX-Admin: 1"},
+			want: "traceparent",
+		},
+		{
+			name: "tracestate_with_cr",
+			msg:  sinks.Message{ID: 1, Destination: "http://x.test", Payload: []byte("{}"), Tracestate: "ts\rinjected"},
+			want: "tracestate",
+		},
+		{
+			name: "user_header_value_with_nul",
+			msg: sinks.Message{
+				ID: 1, Destination: "http://x.test", Payload: []byte("{}"),
+				Headers: map[string]string{"X-Custom": "value\x00null"},
+			},
+			want: "X-Custom",
+		},
+		{
+			name: "user_header_name_with_space",
+			msg: sinks.Message{
+				ID: 1, Destination: "http://x.test", Payload: []byte("{}"),
+				Headers: map[string]string{"X Bad": "ok"},
+			},
+			want: "X Bad",
+		},
+		{
+			name: "user_header_name_empty",
+			msg: sinks.Message{
+				ID: 1, Destination: "http://x.test", Payload: []byte("{}"),
+				Headers: map[string]string{"": "ok"},
+			},
+			want: "RFC 7230",
+		},
+		{
+			name: "traceparent_with_nul",
+			msg:  sinks.Message{ID: 1, Destination: "http://x.test", Payload: []byte("{}"), Traceparent: "tp\x00inj"},
+			want: "traceparent",
+		},
+		{
+			name: "header_value_with_del",
+			msg: sinks.Message{
+				ID: 1, Destination: "http://x.test", Payload: []byte("{}"),
+				Headers: map[string]string{"X-Custom": "before\x7fafter"},
+			},
+			want: "X-Custom",
+		},
+	}
+	sink := sinks.NewHTTPSink()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := sink.Send(t.Context(), tc.msg)
+			if err == nil {
+				t.Fatal("Send returned nil for malformed header")
+			}
+			if sinks.IsRetryable(err) {
+				t.Errorf("malformed header classified as retryable: %v", err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q missing %q for diagnosability", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestHTTPSink_ErrorIncludesBodySnippet(t *testing.T) {
 	cases := []struct {
 		name   string
