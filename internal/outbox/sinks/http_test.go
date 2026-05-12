@@ -124,7 +124,6 @@ func TestHTTPSink_UserHeadersCannotOverwriteReserved(t *testing.T) {
 		t.Fatalf("Send: %v", err)
 	}
 
-	// Reserved still set by sink.
 	if got := seen.Get("Content-Type"); got != "application/json" {
 		t.Errorf("Content-Type = %q, user header leaked through", got)
 	}
@@ -137,7 +136,6 @@ func TestHTTPSink_UserHeadersCannotOverwriteReserved(t *testing.T) {
 	if got := seen.Get("Tracestate"); got != "ts-real" {
 		t.Errorf("Tracestate = %q, user header leaked through", got)
 	}
-	// Custom user headers passed through unchanged.
 	if got := seen.Get("X-Custom-Header"); got != "kept" {
 		t.Errorf("X-Custom-Header = %q, want kept", got)
 	}

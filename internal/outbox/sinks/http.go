@@ -16,6 +16,11 @@ import (
 // retryable (408 / 425 / 429 / 5xx + network errors) and terminal
 // (everything else, including malformed destinations and 3xx); the
 // dispatcher (#6) owns the retry policy and surfaces metrics.
+//
+// Trust boundary: any caller with INSERT on pgrelay_outbox controls
+// row.destination, and pgrelay will POST to that URL from the
+// dispatcher's network — restrict INSERT to trusted producers or this
+// becomes an SSRF pivot inside the cluster.
 type HTTPSink struct {
 	client *http.Client
 }

@@ -175,7 +175,6 @@ func TestDispatcher_MaxAttemptsExhaustedGoesDead(t *testing.T) {
 	cfg.MaxAttempts = 2
 	f := startDispatcher(t, pool, cfg)
 
-	// Always retryable — dispatcher should give up after MaxAttempts.
 	f.Sink.SetOnSend(func(_ context.Context, _ sinks.Message) error {
 		return sinks.NewRetryableError(errors.New("503"), 0)
 	})
@@ -190,7 +189,6 @@ func TestDispatcher_MaxAttemptsExhaustedGoesDead(t *testing.T) {
 func TestDispatcher_RetryAfterIsFloor(t *testing.T) {
 	pool := testdb.New(t)
 	cfg := fastConfig()
-	// Make policy's NextDelay tiny so RetryAfter clearly wins.
 	cfg.RetryBase = time.Millisecond
 	cfg.RetryMax = 5 * time.Second
 	f := startDispatcher(t, pool, cfg)

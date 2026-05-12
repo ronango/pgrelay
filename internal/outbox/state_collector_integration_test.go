@@ -35,7 +35,6 @@ func TestStateCollector_CountsAndBacklog(t *testing.T) {
 	// assertion has comfortable headroom over container clock jitter.
 	insertRow(t, pool, insertOpts{Status: "pending", NextAttemptAt: time.Now().Add(-10 * time.Minute)})
 	insertRow(t, pool, insertOpts{Status: "pending", NextAttemptAt: time.Now().Add(-5 * time.Second)})
-	// Future pending must NOT count toward backlog.
 	insertRow(t, pool, insertOpts{Status: "pending", NextAttemptAt: time.Now().Add(time.Hour)})
 
 	insertRow(t, pool, insertOpts{

@@ -5,10 +5,9 @@
 -- ORDERING CAVEAT: BIGSERIAL is monotonic per-connection but NOT per-commit.
 -- Two concurrent producers writing to the same aggregate can commit out of
 -- id order; readers ORDER BY id may then dispatch the later-committed row
--- first. This is acceptable for v0.1.0-alpha (per-aggregate ordering is
--- post-Week-2 per the plan). Resolve before per-aggregate ordering ships:
--- typical fix is a (aggregate_id, seq BIGINT) populated under a transactional
--- advisory lock, or an xact_id snapshot via pg_current_xact_id() (PG 13+).
+-- first. Acceptable for v0.1.0-alpha — revisit when per-aggregate ordering
+-- is added. Typical fix: (aggregate_id, seq BIGINT) populated under a
+-- transactional advisory lock, or xact_id via pg_current_xact_id() (PG 13+).
 --
 -- DEFERRED: a standalone (status) index for ad-hoc operator triage queries.
 -- Outbox is a work queue with retention, not a log table — partial indexes
