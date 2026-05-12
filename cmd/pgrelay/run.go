@@ -25,6 +25,11 @@ import (
 // by SIGINT/SIGTERM at that point.
 const otelFlushTimeout = 5 * time.Second
 
+// ErrShutdownTimeout is returned when subsystems don't drain within
+// cfg.ShutdownTimeout. Surfaced as a non-zero exit so k8s/systemd see
+// a non-graceful shutdown distinct from a clean stop.
+var ErrShutdownTimeout = errors.New("shutdown timeout exceeded")
+
 func runCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "run",
@@ -92,13 +97,38 @@ func runAction(ctx context.Context, _ *cli.Command) error {
 	g.Go(func() error { return healthSrv.Run(gctx) })
 	g.Go(func() error { return dispatcher.Run(gctx) })
 
-	// context.Canceled here means SIGINT/SIGTERM — that's the
-	// success exit, not an error.
-	if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
+	err = waitWithShutdownBudget(ctx, g, cfg.ShutdownTimeout, log)
+	// context.Canceled means SIGINT/SIGTERM — that's the success exit.
+	if err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
 	log.InfoContext(ctx, "pgrelay stopped")
 	return nil
+}
+
+// waitWithShutdownBudget waits for g to finish. Once the parent ctx is
+// canceled (SIGINT/SIGTERM), it caps the additional wait by timeout —
+// a stuck subsystem cannot pin the process open past this budget. The
+// k8s operator pairs this with terminationGracePeriodSeconds.
+func waitWithShutdownBudget(ctx context.Context, g *errgroup.Group, timeout time.Duration, log *slog.Logger) error {
+	errCh := make(chan error, 1)
+	go func() { errCh <- g.Wait() }()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+	}
+
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case err := <-errCh:
+		return err
+	case <-t.C:
+		log.WarnContext(ctx, "shutdown timeout exceeded, subsystems may not have drained", "timeout", timeout)
+		return ErrShutdownTimeout
+	}
 }
 
 func newLogger(level string) *slog.Logger {
