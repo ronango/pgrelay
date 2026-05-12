@@ -40,7 +40,7 @@ Configuration is via env vars — see [`internal/config/config.go`](./internal/c
 ## Roadmap
 
 - `v0.2.0` — Kafka sink (franz-go), `pkg/tracectx` extract/inject helpers, embeddable Go API, dispatcher spans
-- `v0.3.0` — polyglot examples (Go + Python producers, mixed consumer), full docker-compose demo, Tempo trace screenshot
+- `v0.3.0` — polyglot examples (Go + Python producers, mixed consumer), Tempo/Jaeger demo compose, trace screenshot
 - `v1.0.0` — k6 benchmarks, Grafana dashboard, multi-arch Docker image, launch
 
 ## License
