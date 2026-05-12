@@ -59,9 +59,6 @@ func (c Config) Validate() error {
 // a second call with the same reg fails with AlreadyRegisteredError.
 // For multiple pools, wrap reg with prometheus.WrapRegistererWith so
 // each pool's metrics carry distinguishing labels.
-//
-// Future commits will add OTel tracing on the same ConnConfig.Tracer
-// hook — composition will require pgx.MultiTracer.
 func New(ctx context.Context, cfg Config, reg prometheus.Registerer) (pool *pgxpool.Pool, err error) {
 	if err = cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("validate pgconn config: %w", err)
