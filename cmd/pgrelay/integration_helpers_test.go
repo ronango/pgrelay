@@ -89,8 +89,8 @@ const runArgsTimeout = 30 * time.Second
 func runArgs(t testing.TB, envOverrides []string, args ...string) cmdResult {
 	t.Helper()
 	// Resolve the binary outside the timeout — the first caller pays
-	// the `go build -race` cost (~30s cold), and that's compile time,
-	// not subcommand runtime.
+	// the `go build` cost (seconds on cold cache), and that's compile
+	// time, not subcommand runtime.
 	bin := buildBinary(t)
 
 	ctx, cancel := context.WithTimeout(t.Context(), runArgsTimeout)

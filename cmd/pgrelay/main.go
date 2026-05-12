@@ -25,8 +25,8 @@ func main() {
 	}
 }
 
-// dispatch returns instead of calling os.Exit so deferred cleanup (signal
-// notify, future OTel flush) actually runs on error paths.
+// dispatch returns instead of calling os.Exit so deferred cleanup (OTel
+// flush, signal notify) actually runs on error paths.
 func dispatch() error {
 	// SIGINT/SIGTERM cancellation flows into long-running subcommands
 	// (run, migrate) via the cli ctx; short ones (version) ignore it.
