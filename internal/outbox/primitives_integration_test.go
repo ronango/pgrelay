@@ -27,7 +27,6 @@ func TestClaim_HappyPath(t *testing.T) {
 	if rows[0].Attempts != 1 {
 		t.Errorf("Attempts = %d, want 1", rows[0].Attempts)
 	}
-	// Returned LeasedUntil must reflect the requested window.
 	if want := beforeClaim.Add(leaseDuration); rows[0].LeasedUntil.Before(want.Add(-time.Second)) {
 		t.Errorf("returned LeasedUntil = %s, want >= %s", rows[0].LeasedUntil, want)
 	}
@@ -42,8 +41,6 @@ func TestClaim_HappyPath(t *testing.T) {
 }
 
 func TestClaim_TieBreaksByID(t *testing.T) {
-	// Two rows with the same next_attempt_at must dispatch in id order
-	// per Claim's ORDER BY next_attempt_at, id.
 	pool := testdb.New(t)
 	at := time.Now().Add(-time.Second)
 	idLow := insertRow(t, pool, insertOpts{NextAttemptAt: at})
@@ -111,8 +108,6 @@ func TestClaim_SkipsLockedRows(t *testing.T) {
 	id1 := insertRow(t, pool, insertOpts{})
 	id2 := insertRow(t, pool, insertOpts{})
 
-	// Hold a row lock from a separate connection. The Claim's
-	// FOR UPDATE SKIP LOCKED must pass this row over to id2.
 	tx, err := pool.Begin(t.Context())
 	if err != nil {
 		t.Fatalf("Begin: %v", err)

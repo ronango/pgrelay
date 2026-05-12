@@ -56,7 +56,7 @@ func TestSink_EnqueueErrorsConsumesInOrder(t *testing.T) {
 		results[i] = m.Send(t.Context(), sinks.Message{ID: int64(i)})
 	}
 
-	wants := []error{boom, nil, boom, nil} // 4th call: queue exhausted, returns nil
+	wants := []error{boom, nil, boom, nil}
 	for i, want := range wants {
 		if !errors.Is(results[i], want) {
 			t.Errorf("Send[%d] = %v, want %v", i, results[i], want)
@@ -68,7 +68,7 @@ func TestSink_EnqueueErrorsAppends(t *testing.T) {
 	a, b := errors.New("a"), errors.New("b")
 	m := sinkmock.New("")
 	m.EnqueueErrors(a)
-	m.EnqueueErrors(b) // appends, doesn't replace
+	m.EnqueueErrors(b)
 
 	results := []error{
 		m.Send(t.Context(), sinks.Message{ID: 1}),
@@ -81,7 +81,7 @@ func TestSink_EnqueueErrorsAppends(t *testing.T) {
 
 func TestSink_OnSendCallbackTakesPrecedence(t *testing.T) {
 	m := sinkmock.New("")
-	m.EnqueueErrors(errors.New("queued")) // would fire if callback wasn't set
+	m.EnqueueErrors(errors.New("queued"))
 
 	called := 0
 	m.SetOnSend(func(_ context.Context, msg sinks.Message) error {
@@ -161,7 +161,6 @@ func TestSink_ConcurrentSendsAreSafe(t *testing.T) {
 		t.Fatalf("Sent len = %d, want %d", len(sent), total)
 	}
 
-	// Assert no message was lost or duplicated under contention.
 	got := make([]int64, len(sent))
 	for i, msg := range sent {
 		got[i] = msg.ID

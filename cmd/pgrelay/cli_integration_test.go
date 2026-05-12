@@ -33,13 +33,11 @@ func TestCLI_MigrateLifecycle(t *testing.T) {
 	dsn := pool.Config().ConnString()
 	env := []string{"PGRELAY_DATABASE_URL=" + dsn}
 
-	// status reflects the migrations testdb applied.
 	if res := runArgs(t, env, "migrate", "status"); res.err != nil ||
 		!strings.Contains(res.stdout, "version=") {
 		t.Fatalf("migrate status: err=%v stdout=%q stderr=%q", res.err, res.stdout, res.stderr)
 	}
 
-	// down without --yes must refuse — fat-finger guard.
 	res := runArgs(t, env, "migrate", "down")
 	if res.err == nil {
 		t.Fatalf("migrate down without --yes succeeded; want error\nstdout=%q", res.stdout)
@@ -48,13 +46,10 @@ func TestCLI_MigrateLifecycle(t *testing.T) {
 		t.Errorf("migrate down stderr = %q, want mention of --yes", res.stderr)
 	}
 
-	// down with --yes rolls back one step.
 	if res := runArgs(t, env, "migrate", "down", "--yes"); res.err != nil {
 		t.Fatalf("migrate down --yes: %v\nstderr: %s", res.err, res.stderr)
 	}
 
-	// up re-applies; idempotent on the second invocation (ErrNoChange
-	// is swallowed in migrateUpAction).
 	if res := runArgs(t, env, "migrate", "up"); res.err != nil {
 		t.Fatalf("migrate up: %v\nstderr: %s", res.err, res.stderr)
 	}
