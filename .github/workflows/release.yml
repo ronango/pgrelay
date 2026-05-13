@@ -74,6 +74,9 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - name: Short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
@@ -81,9 +84,11 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Short SHA matches the tarball build's COMMIT so both
+          # artifacts report the same `pgrelay version` string.
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}
-            COMMIT=${{ github.sha }}
+            COMMIT=${{ steps.sha.outputs.short }}
 
   release:
     needs: [binaries, docker]
@@ -92,6 +97,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v4
         with:
+          # docker/build-push-action v6 auto-uploads a `<repo>.dockerbuild`
+          # build-summary artifact; filter to the binary tarballs only.
+          pattern: bin-*
           path: artifacts
           merge-multiple: true
       - name: Extract CHANGELOG section
