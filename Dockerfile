@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # --- Build stage ---
-FROM golang:1.26-alpine@sha256:f85330846cde1e57ca9ec309382da3b8e6ae3ab943d2739500e08c86393a21b1 AS builder
+FROM golang:1.26-alpine@sha256:7a3e50096189ad57c9f9f865e7e4aa8585ed1585248513dc5cda498e2f41812c AS builder
 
 WORKDIR /src
 
@@ -20,7 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     ./cmd/pgrelay
 
 # --- Final stage ---
-FROM gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:d093aa3e30dbadd3efe1310db061a14da60299baff8450a17fe0ccc514a16639
 
 ARG VERSION=dev
 ARG COMMIT=""
