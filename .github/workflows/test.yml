@@ -17,7 +17,7 @@ jobs:
   floor:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Verify go.mod floor is 1.25
         run: |
           grep -qE '^go 1\.25' go.mod || {
@@ -32,7 +32,7 @@ jobs:
       matrix:
         go: ["1.25"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
@@ -50,7 +50,7 @@ jobs:
       matrix:
         postgres: ["14", "15", "16", "17"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
