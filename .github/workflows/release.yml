@@ -95,7 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           # docker/build-push-action v6 auto-uploads a `<repo>.dockerbuild`
           # build-summary artifact; filter to the binary tarballs only.
